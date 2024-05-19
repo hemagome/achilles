@@ -1,45 +1,49 @@
-use crossterm::{
-    event::{self, KeyCode, KeyEventKind},
-    terminal::{
-        disable_raw_mode, enable_raw_mode, EnterAlternateScreen,
-        LeaveAlternateScreen,
-    },
-    ExecutableCommand,
-};
-use ratatui::{
-    prelude::{CrosstermBackend, Stylize, Terminal},
-    widgets::Paragraph,
-};
-use std::io::{stdout, Result};
+mod constants;
+mod term;
 
+use std::{
+    env,
+    fs,
+    io::{self, Result}
+};
+
+use directories::ProjectDirs;
+use dotenv::dotenv;
+use serde::Deserialize;
+
+
+#[derive(Deserialize)]
+struct Config {
+    name: String
+}
 fn main() -> Result<()> {
-    stdout().execute(EnterAlternateScreen)?;
-    enable_raw_mode()?;
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    terminal.clear()?;
-
-    loop {
-        terminal.draw(|frame| {
-            let area = frame.size();
-            frame.render_widget(
-                Paragraph::new("Hello Ratatui! (press 'q' to quit)")
-                    .white()
-                    .on_green(),
-                area,
-            );
-        })?;
-        if event::poll(std::time::Duration::from_millis(16))? {
-            if let event::Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press
-                    && key.code == KeyCode::Char('q')
-                {
-                    break;
+    env_logger::init();
+    dotenv().ok();
+    let environment = env::var("ENVIRONMENT").map_err(|e| {
+        io::Error::new(io::ErrorKind::NotFound, format!("Failed to read ENVIRONMENT: {}", e))
+    })?;
+    let organization = env::var("ORGANIZATION").map_err(|e| {
+        io::Error::new(io::ErrorKind::NotFound, format!("Failed to read ORGANIZATION: {}", e))
+    })?;
+    if let Some(proj_dirs) = ProjectDirs::from(
+        &environment,
+        &organization,
+        constants::project::PROJECT_NAME,
+    ) {
+        let config_dir = proj_dirs.config_dir();
+        let config_file = fs::read_to_string(
+            config_dir.join("mycli.toml"),
+        );
+        let config: Config = match config_file {
+            Ok(file) => toml::from_str(&file).unwrap(),
+            Err(_) => {
+                term::init("Hector Gomez").expect("TODO: panic message");
+                Config {
+                name: "Hector Gomez".to_string(),
                 }
-            }
-        }
+            },
+        };
+        println!("{}", config.name)
     }
-
-    stdout().execute(LeaveAlternateScreen)?;
-    disable_raw_mode()?;
     Ok(())
 }
